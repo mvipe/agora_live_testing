@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#f0f0f0">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Agora Live Stream"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textAlignment="center"
+        android:layout_marginBottom="32dp"
+        android:textColor="#333333" />
+
+    <EditText
+        android:id="@+id/et_channel_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Enter channel name"
+        android:layout_marginBottom="16dp"
+        android:padding="12dp"
+        android:background="@drawable/edit_text_background" />
+
+    <Button
+        android:id="@+id/btn_start_broadcast"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Start Broadcasting"
+        android:layout_marginBottom="16dp"
+        android:padding="16dp"
+        android:textSize="16sp"
+        android:background="@drawable/button_primary_background" />
+
+    <Button
+        android:id="@+id/btn_join_as_viewer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Join as Viewer"
+        android:padding="16dp"
+        android:textSize="16sp"
+        android:background="@drawable/button_secondary_background" />
+
+</LinearLayout>
