@@ -1,14 +1,17 @@
 package com.crmind.agoratesting
 
-import android.media.AudioManager
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.util.Log
 import android.view.SurfaceView
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import io.agora.rtc2.ChannelMediaOptions
 import io.agora.rtc2.Constants
 import io.agora.rtc2.IRtcEngineEventHandler
@@ -20,103 +23,150 @@ class ViewerActivity : AppCompatActivity() {
     private var mRtcEngine: RtcEngine? = null
     private var channelName: String? = null
     private var audioMuted = false
+    private var isFullscreen = false
 
+    // UI Elements
     private var remoteVideoContainer: FrameLayout? = null
     private var btnMuteAudio: Button? = null
+    private var btnFullscreen: Button? = null
     private var btnLeaveChannel: Button? = null
     private var tvChannelInfo: TextView? = null
     private var tvConnectionStatus: TextView? = null
+    private var tvViewerCount: TextView? = null
+    private var tvStreamQuality: TextView? = null
+    private var tvAudioIndicator: TextView? = null
+    private var tvQualityIndicator: TextView? = null
+    private var chatMessagesContainer: LinearLayout? = null
 
     private val mRtcEventHandler: IRtcEngineEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             runOnUiThread {
-                Log.i(TAG, "✅ Join channel success, uid: $uid")
+                Log.i(TAG, "✅ Joined channel as viewer - UID: $uid")
                 tvConnectionStatus?.text = "Connected"
-                Toast.makeText(this@ViewerActivity, "Connected! Waiting for broadcaster...", Toast.LENGTH_SHORT).show()
+                tvConnectionStatus?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.holo_blue_light))
+                Toast.makeText(this@ViewerActivity, "Connected! Waiting for stream...", Toast.LENGTH_SHORT).show()
             }
         }
 
         override fun onUserJoined(uid: Int, elapsed: Int) {
             runOnUiThread {
-                Log.i(TAG, "👤 User joined: $uid")
+                Log.i(TAG, "🎥 Broadcaster connected: $uid")
                 setupRemoteVideo(uid)
                 tvConnectionStatus?.text = "🔴 LIVE"
-                Toast.makeText(this@ViewerActivity, "Broadcaster connected!", Toast.LENGTH_SHORT).show()
+                tvConnectionStatus?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.holo_red_light))
+                addChatMessage("System", "Stream started! 🎉")
+                Toast.makeText(this@ViewerActivity, "🔴 Stream is LIVE!", Toast.LENGTH_SHORT).show()
             }
         }
 
         override fun onUserOffline(uid: Int, reason: Int) {
             runOnUiThread {
-                Log.i(TAG, "👤 User offline: $uid, reason: $reason")
+                Log.i(TAG, "📱 Broadcaster disconnected: $uid")
                 remoteVideoContainer?.removeAllViews()
-                tvConnectionStatus?.text = "Stream ended"
-                Toast.makeText(this@ViewerActivity, "Broadcaster left", Toast.LENGTH_SHORT).show()
+                tvConnectionStatus?.text = "Stream Ended"
+                tvConnectionStatus?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.darker_gray))
+                addChatMessage("System", "Stream ended 👋")
+                Toast.makeText(this@ViewerActivity, "Stream ended", Toast.LENGTH_SHORT).show()
             }
         }
 
         override fun onRemoteAudioStateChanged(uid: Int, state: Int, reason: Int, elapsed: Int) {
-            Log.d(TAG, "🎵 Remote audio state changed - uid: $uid, state: $state, reason: $reason")
             runOnUiThread {
                 when (state) {
-                    Constants.REMOTE_AUDIO_STATE_STOPPED -> {
-                        Log.d(TAG, "❌ Remote audio STOPPED")
-                        Toast.makeText(this@ViewerActivity, "Audio stopped", Toast.LENGTH_SHORT).show()
-                    }
                     Constants.REMOTE_AUDIO_STATE_STARTING -> {
-                        Log.d(TAG, "🎵 Remote audio STARTING...")
-                        Toast.makeText(this@ViewerActivity, "Audio starting...", Toast.LENGTH_SHORT).show()
+                        tvAudioIndicator?.text = "🔊 Connecting..."
+                        tvAudioIndicator?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.holo_orange_light))
                     }
                     Constants.REMOTE_AUDIO_STATE_DECODING -> {
-                        Log.d(TAG, "✅ Remote audio DECODING - AUDIO SHOULD BE WORKING!")
-                        Toast.makeText(this@ViewerActivity, "🔊 Audio connected!", Toast.LENGTH_LONG).show()
-                        tvConnectionStatus?.text = "🔴 LIVE (Audio: ON)"
+                        tvAudioIndicator?.text = "🔊 ON"
+                        tvAudioIndicator?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.holo_green_light))
+                        addChatMessage("System", "Audio connected! 🎵")
+                    }
+                    Constants.REMOTE_AUDIO_STATE_STOPPED -> {
+                        tvAudioIndicator?.text = "🔇 OFF"
+                        tvAudioIndicator?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.holo_red_light))
                     }
                     Constants.REMOTE_AUDIO_STATE_FROZEN -> {
-                        Log.d(TAG, "❄️ Remote audio FROZEN")
-                        Toast.makeText(this@ViewerActivity, "Audio frozen", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-
-        override fun onAudioVolumeIndication(speakers: Array<out AudioVolumeInfo>?, totalVolume: Int) {
-            // Debug: Log when we receive audio
-            speakers?.forEach { speaker ->
-                if (speaker.volume > 0) {
-                    Log.d(TAG, "🔊 Receiving audio from uid ${speaker.uid} - volume: ${speaker.volume}")
-                    runOnUiThread {
-                        tvConnectionStatus?.text = "🔴 LIVE (Audio: ${speaker.volume})"
+                        tvAudioIndicator?.text = "🔊 Buffering..."
+                        tvAudioIndicator?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.holo_orange_light))
                     }
                 }
             }
         }
 
         override fun onRemoteVideoStateChanged(uid: Int, state: Int, reason: Int, elapsed: Int) {
-            Log.d(TAG, "📹 Remote video state changed - uid: $uid, state: $state, reason: $reason")
+            runOnUiThread {
+                when (state) {
+                    Constants.REMOTE_VIDEO_STATE_STARTING -> {
+                        addChatMessage("System", "Video connecting... 📹")
+                    }
+//                    Constants.REMOTE_VIDEO_STATE_DECODING -> {
+//                        addChatMessage("System", "Video connected! 📺")
+//                    }
+                    Constants.REMOTE_VIDEO_STATE_STOPPED -> {
+                        addChatMessage("System", "Video stopped 📱")
+                    }
+                    Constants.REMOTE_VIDEO_STATE_FROZEN -> {
+                        addChatMessage("System", "Video buffering... ⏳")
+                    }
+                }
+            }
+        }
+
+        override fun onRtcStats(stats: RtcStats?) {
+            runOnUiThread {
+                stats?.let {
+                    // Update quality indicator
+                    val quality = when {
+                        it.rxVideoKBitRate > 2000 -> "HD"
+                        it.rxVideoKBitRate > 1000 -> "SD"
+                        it.rxVideoKBitRate > 500 -> "LD"
+                        else -> "Buffering"
+                    }
+                    tvStreamQuality?.text = "📶 $quality"
+                    tvQualityIndicator?.text = quality
+
+                    val color = when (quality) {
+                        "HD" -> android.R.color.holo_green_light
+                        "SD" -> android.R.color.holo_orange_light
+                        else -> android.R.color.holo_red_light
+                    }
+                    tvQualityIndicator?.setTextColor(ContextCompat.getColor(this@ViewerActivity, color))
+                }
+            }
         }
 
         override fun onLeaveChannel(stats: RtcStats?) {
             runOnUiThread {
-                Log.i(TAG, "Left channel")
                 Toast.makeText(this@ViewerActivity, "Left channel", Toast.LENGTH_SHORT).show()
             }
         }
 
 
+
         override fun onError(err: Int) {
             Log.e(TAG, "❌ Error: $err - ${RtcEngine.getErrorDescription(err)}")
-            runOnUiThread {
-                Toast.makeText(this@ViewerActivity, "Error: $err", Toast.LENGTH_SHORT).show()
-            }
         }
 
         override fun onConnectionStateChanged(state: Int, reason: Int) {
             runOnUiThread {
                 when (state) {
-                    Constants.CONNECTION_STATE_CONNECTING -> tvConnectionStatus?.text = "Connecting..."
-                    Constants.CONNECTION_STATE_CONNECTED -> tvConnectionStatus?.text = "Connected"
-                    Constants.CONNECTION_STATE_DISCONNECTED -> tvConnectionStatus?.text = "Disconnected"
-                    Constants.CONNECTION_STATE_FAILED -> tvConnectionStatus?.text = "Connection Failed"
+                    Constants.CONNECTION_STATE_CONNECTING -> {
+                        tvConnectionStatus?.text = "Connecting..."
+                        tvConnectionStatus?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.holo_orange_light))
+                    }
+                    Constants.CONNECTION_STATE_CONNECTED -> {
+                        tvConnectionStatus?.text = "Connected"
+                        tvConnectionStatus?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.holo_blue_light))
+                    }
+                    Constants.CONNECTION_STATE_DISCONNECTED -> {
+                        tvConnectionStatus?.text = "Disconnected"
+                        tvConnectionStatus?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.darker_gray))
+                    }
+                    Constants.CONNECTION_STATE_FAILED -> {
+                        tvConnectionStatus?.text = "Connection Failed"
+                        tvConnectionStatus?.setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.holo_red_light))
+                    }
                 }
             }
         }
@@ -124,36 +174,41 @@ class ViewerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Force portrait orientation
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+
+        // Keep screen on during viewing
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         setContentView(R.layout.activity_viewer_layout)
 
         channelName = intent.getStringExtra("CHANNEL_NAME")
 
-        checkAudioSettings()
         initViews()
         initializeAndJoinChannel()
         setupClickListeners()
-    }
-
-    private fun checkAudioSettings() {
-        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-
-        Log.d(TAG, "🔊 Viewer Audio Settings:")
-        Log.d(TAG, "- Media Volume: ${audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)}")
-        Log.d(TAG, "- Max Media Volume: ${audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}")
-        Log.d(TAG, "- Voice Call Volume: ${audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)}")
-        Log.d(TAG, "- Ringer Mode: ${audioManager.ringerMode}")
-        Log.d(TAG, "- Is Speakerphone On: ${audioManager.isSpeakerphoneOn}")
+        addWelcomeChatMessages()
     }
 
     private fun initViews() {
         remoteVideoContainer = findViewById(R.id.remote_video_view_container)
         btnMuteAudio = findViewById(R.id.btn_mute_audio)
+        btnFullscreen = findViewById(R.id.btn_fullscreen)
         btnLeaveChannel = findViewById(R.id.btn_leave_channel)
         tvChannelInfo = findViewById(R.id.tv_channel_info_viewer)
         tvConnectionStatus = findViewById(R.id.tv_connection_status)
+        tvViewerCount = findViewById(R.id.tv_viewer_count_viewer)
+        tvStreamQuality = findViewById(R.id.tv_stream_quality_viewer)
+        tvAudioIndicator = findViewById(R.id.tv_audio_indicator)
+        tvQualityIndicator = findViewById(R.id.tv_quality_indicator)
+        chatMessagesContainer = findViewById(R.id.chat_messages_container)
 
-        tvChannelInfo?.text = "👁️ Watching: $channelName"
+        tvChannelInfo?.text = channelName
         tvConnectionStatus?.text = "Connecting..."
+        tvViewerCount?.text = "👁️ 1 viewer"
+        tvStreamQuality?.text = "📶 HD"
+        tvAudioIndicator?.text = "🔊 ON"
     }
 
     private fun initializeAndJoinChannel() {
@@ -167,32 +222,17 @@ class ViewerActivity : AppCompatActivity() {
             mRtcEngine = RtcEngine.create(config)
 
             mRtcEngine?.let { engine ->
-                Log.d(TAG, "🎵 Configuring audio for viewer...")
-
-                // Audio configuration for receiving
+                // Audio configuration
                 engine.enableAudio()
-                Log.d(TAG, "✅ Audio enabled")
-
-                // Set audio profile for better quality
                 engine.setAudioProfile(Constants.AUDIO_PROFILE_MUSIC_HIGH_QUALITY_STEREO)
-                Log.d(TAG, "✅ Audio profile set")
-
-                // Boost playback volume
-                engine.adjustPlaybackSignalVolume(400) // Max boost
-                Log.d(TAG, "✅ Playback volume boosted to 400")
-
-                // Route to speaker
+                engine.adjustPlaybackSignalVolume(400)
                 engine.setDefaultAudioRoutetoSpeakerphone(true)
-                Log.d(TAG, "✅ Audio routed to speakerphone")
-
-                // Enable volume indication
                 engine.enableAudioVolumeIndication(200, 3, true)
-                Log.d(TAG, "✅ Volume indication enabled")
 
                 // Video configuration
                 engine.enableVideo()
 
-                // Set channel profile and role
+                // Channel configuration
                 engine.setChannelProfile(Constants.CHANNEL_PROFILE_LIVE_BROADCASTING)
                 engine.setClientRole(Constants.CLIENT_ROLE_AUDIENCE)
 
@@ -200,30 +240,25 @@ class ViewerActivity : AppCompatActivity() {
                 val options = ChannelMediaOptions().apply {
                     channelProfile = Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
                     clientRoleType = Constants.CLIENT_ROLE_AUDIENCE
-                    autoSubscribeAudio = true  // CRITICAL
+                    autoSubscribeAudio = true
                     autoSubscribeVideo = true
                 }
 
-                Log.d(TAG, "🚀 Joining channel as viewer: $channelName")
-                val result = engine.joinChannel(null, channelName, 0, options)
-                Log.d(TAG, "Join result: $result ${if (result == 0) "✅" else "❌"}")
+                engine.joinChannel(null, channelName, 0, options)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "💥 Error initializing Agora: ${e.message}")
-            e.printStackTrace()
+            Log.e(TAG, "Error initializing Agora: ${e.message}")
             Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun setupRemoteVideo(uid: Int) {
-        val surfaceView: SurfaceView = RtcEngine.CreateRendererView(baseContext)
+        val surfaceView = RtcEngine.CreateRendererView(baseContext)
         remoteVideoContainer?.removeAllViews()
         remoteVideoContainer?.addView(surfaceView)
 
         val remoteVideoCanvas = VideoCanvas(surfaceView, VideoCanvas.RENDER_MODE_HIDDEN, uid)
         mRtcEngine?.setupRemoteVideo(remoteVideoCanvas)
-
-        Log.d(TAG, "📹 Remote video setup for uid: $uid")
     }
 
     private fun setupClickListeners() {
@@ -231,14 +266,59 @@ class ViewerActivity : AppCompatActivity() {
             audioMuted = !audioMuted
             mRtcEngine?.muteAllRemoteAudioStreams(audioMuted)
             btnMuteAudio?.text = if (audioMuted) "🔇 Unmute Audio" else "🔊 Mute Audio"
-            Log.d(TAG, "🔇 Remote audio muted: $audioMuted")
+            tvAudioIndicator?.text = if (audioMuted) "🔇 MUTED" else "🔊 ON"
 
             val message = if (audioMuted) "Audio muted" else "Audio unmuted"
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
 
+        btnFullscreen?.setOnClickListener {
+            // Toggle fullscreen (simplified version)
+            isFullscreen = !isFullscreen
+            if (isFullscreen) {
+                // Hide system UI for fullscreen
+                window.decorView.systemUiVisibility = (
+                        android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                                or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                        )
+                btnFullscreen?.text = "⛶ Exit Fullscreen"
+            } else {
+                // Show system UI
+                window.decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+                btnFullscreen?.text = "⛶ Fullscreen"
+            }
+        }
+
         btnLeaveChannel?.setOnClickListener {
-            finish()
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Leave Stream")
+                .setMessage("Are you sure you want to leave this live stream?")
+                .setPositiveButton("Leave") { _, _ ->
+                    finish()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
+    private fun addWelcomeChatMessages() {
+        addChatMessage("System", "Welcome to the live stream! 👋")
+        addChatMessage("System", "Say hello in the comments! 💬")
+    }
+
+    private fun addChatMessage(username: String, message: String) {
+        val chatMessage = TextView(this).apply {
+            text = "👤 $username: $message"
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(this@ViewerActivity, android.R.color.white))
+            setPadding(0, 4, 0, 4)
+        }
+        chatMessagesContainer?.addView(chatMessage)
+
+        // Auto-scroll to bottom
+        findViewById<android.widget.ScrollView>(R.id.chat_scroll_view)?.post {
+            findViewById<android.widget.ScrollView>(R.id.chat_scroll_view)?.fullScroll(android.widget.ScrollView.FOCUS_DOWN)
         }
     }
 
