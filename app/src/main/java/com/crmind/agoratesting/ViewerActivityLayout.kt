@@ -324,14 +324,16 @@ class ViewerActivity : AppCompatActivity() {
             mRtcEngine?.let { engine ->
                 Log.i(TAG, "⚙️ Configuring engine...")
 
-                // Audio configuration
+                // Basic audio configuration - simplified
                 val audioResult = engine.enableAudio()
                 Log.i(TAG, "⚙️ Enable audio result: $audioResult")
 
-                val audioProfileResult = engine.setAudioProfile(Constants.AUDIO_PROFILE_MUSIC_HIGH_QUALITY_STEREO)
+                // Use default audio profile first
+                val audioProfileResult = engine.setAudioProfile(Constants.AUDIO_PROFILE_DEFAULT)
                 Log.i(TAG, "⚙️ Audio profile result: $audioProfileResult")
 
-                val volumeResult = engine.adjustPlaybackSignalVolume(400)
+                // Normal volume (100%)
+                val volumeResult = engine.adjustPlaybackSignalVolume(100)
                 Log.i(TAG, "⚙️ Volume adjustment result: $volumeResult")
 
                 val speakerResult = engine.setDefaultAudioRoutetoSpeakerphone(true)
@@ -351,16 +353,19 @@ class ViewerActivity : AppCompatActivity() {
                 val clientRoleResult = engine.setClientRole(Constants.CLIENT_ROLE_AUDIENCE)
                 Log.i(TAG, "⚙️ Client role result: $clientRoleResult")
 
-                // Join channel
+
                 val options = ChannelMediaOptions().apply {
                     channelProfile = Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
                     clientRoleType = Constants.CLIENT_ROLE_AUDIENCE
                     autoSubscribeAudio = true
                     autoSubscribeVideo = true
+                    publishMicrophoneTrack = false  // Explicit for audience
+                    publishCameraTrack = false      // Explicit for audience
                 }
                 Log.i(TAG, "⚙️ Channel options created - autoSubscribeAudio: ${options.autoSubscribeAudio}, autoSubscribeVideo: ${options.autoSubscribeVideo}")
 
                 Log.i(TAG, "⚙️ About to join channel: $channelName with token: $TOKEN")
+                // Use UID 0 to let Agora assign a unique UID
                 val joinResult = engine.joinChannel(TOKEN, channelName, 1, options)
                 Log.i(TAG, "⚙️ Join channel result: $joinResult")
 
