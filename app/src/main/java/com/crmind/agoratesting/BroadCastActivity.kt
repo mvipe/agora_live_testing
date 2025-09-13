@@ -172,6 +172,8 @@ class BroadcastActivity : AppCompatActivity() {
         tvStreamQuality?.text = "HD"
     }
 
+    // In BroadcastActivity - Replace initializeAndJoinChannel() method
+
     private fun initializeAndJoinChannel() {
         try {
             val config = RtcEngineConfig().apply {
@@ -180,16 +182,20 @@ class BroadcastActivity : AppCompatActivity() {
                 mEventHandler = mRtcEventHandler
             }
 
+            Log.d(TAG, "Creating Agora engine for broadcasting...")
             mRtcEngine = RtcEngine.create(config)
 
             mRtcEngine?.let { engine ->
+                Log.d(TAG, "Configuring for pure broadcasting (one-way stream)...")
+
                 // Audio configuration
                 engine.enableAudio()
                 engine.setAudioProfile(Constants.AUDIO_PROFILE_MUSIC_HIGH_QUALITY_STEREO)
-                //engine.setAudioScenario(Constants.AUDIO_SCENARIO_BROADCASTING)
+               // engine.setAudioScenario(Constants.AUDIO_SCENARIO_BROADCASTING)
                 engine.enableLocalAudio(true)
                 engine.adjustRecordingSignalVolume(400)
                 engine.setDefaultAudioRoutetoSpeakerphone(true)
+                engine.enableAudioVolumeIndication(200, 3, true)
 
                 // Video configuration for portrait streaming
                 engine.enableVideo()
@@ -197,35 +203,53 @@ class BroadcastActivity : AppCompatActivity() {
 
                 // Set video encoder configuration for portrait
                 val videoConfig = io.agora.rtc2.video.VideoEncoderConfiguration().apply {
-                    dimensions = io.agora.rtc2.video.VideoEncoderConfiguration.VideoDimensions(720, 1280) // Portrait HD
+                    dimensions = io.agora.rtc2.video.VideoEncoderConfiguration.VideoDimensions(720, 1280)
                     frameRate = io.agora.rtc2.video.VideoEncoderConfiguration.FRAME_RATE.FRAME_RATE_FPS_30.value
-                    bitrate = 2000 // 2Mbps for good quality
+                    bitrate = 2000
                     orientationMode = io.agora.rtc2.video.VideoEncoderConfiguration.ORIENTATION_MODE.ORIENTATION_MODE_FIXED_PORTRAIT
                 }
                 engine.setVideoEncoderConfiguration(videoConfig)
 
-                // Channel configuration
-                engine.setChannelProfile(Constants.CHANNEL_PROFILE_LIVE_BROADCASTING)
+                // ✅ FIXED: Use COMMUNICATION profile for broadcasting streams
+                engine.setChannelProfile(Constants.CHANNEL_PROFILE_COMMUNICATION)
+
+                // ✅ FIXED: Broadcaster role in communication mode
                 engine.setClientRole(Constants.CLIENT_ROLE_BROADCASTER)
 
                 // Setup local video
                 setupLocalVideo()
 
-                // Join channel
+                // ✅ FIXED: Channel options for broadcasting stream
                 val options = ChannelMediaOptions().apply {
-                    channelProfile = Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
+                    // Use communication profile
+                    channelProfile = Constants.CHANNEL_PROFILE_COMMUNICATION
                     clientRoleType = Constants.CLIENT_ROLE_BROADCASTER
+
+                    // Broadcaster settings
                     autoSubscribeAudio = true
                     autoSubscribeVideo = true
+
+                    // ✅ CRITICAL: Enable publishing for broadcaster
                     publishCameraTrack = true
                     publishMicrophoneTrack = true
-                    publishCustomAudioTrack = true
+                   // publishAudioTrack = true
+
+                    // Disable custom tracks
+                    publishCustomAudioTrack = false
+                    publishCustomVideoTrack = false
                 }
 
-                engine.joinChannel(null, channelName, 0, options)
+                Log.d(TAG, "Starting broadcast stream: $channelName")
+                val result = engine.joinChannel(null, channelName, 0, options)
+                Log.d(TAG, "Join channel result: $result")
+
+                if (result != 0) {
+                    Toast.makeText(this, "Failed to start broadcast: $result", Toast.LENGTH_LONG).show()
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing Agora: ${e.message}")
+            e.printStackTrace()
             Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
@@ -323,6 +347,6 @@ class BroadcastActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "BroadcastActivity"
         // Replace with your actual Agora App ID
-        private const val APP_ID = "981b297946924367814392114c9baed9"
+        private const val APP_ID = "d9de868cb3af4d3993740451364ff302"
     }
 }
